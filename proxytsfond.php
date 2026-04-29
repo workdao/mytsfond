@@ -36,16 +36,17 @@ curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // В продакшене лу
 curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
 // Передаем заголовки от клиента (например, Cookie, если нужно)
-$headers = [];
+$headers = [
+    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer: https://my.tsfond.ru/city'
+];
 if (function_exists('getallheaders')) {
     $allHeaders = getallheaders();
     if (isset($allHeaders['Authorization'])) {
         $headers[] = 'Authorization: ' . $allHeaders['Authorization'];
     }
 }
-if (!empty($headers)) {
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-}
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
 // Выполняем запрос
 $response = curl_exec($ch);
