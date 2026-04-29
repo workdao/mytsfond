@@ -162,6 +162,8 @@
 
 <script>
     // Конфигурация
+    // Используем proxy.php для обхода CORS (раскомментируйте строку ниже и загрузите proxy.php на сервер)
+    // const PROXY_URL = 'proxy.php?url='; 
     const API_URL = 'https://my.tsfond.ru/city/get-cities-list';
     
     // Состояние приложения
@@ -218,7 +220,13 @@
         const statsPanel = document.getElementById('stats-panel');
 
         try {
-            const response = await fetch(API_URL);
+            // Проверяем, настроен ли proxy
+            let url = API_URL;
+            if (typeof PROXY_URL !== 'undefined' && PROXY_URL) {
+                url = PROXY_URL + encodeURIComponent(API_URL);
+            }
+            
+            const response = await fetch(url);
             if (!response.ok) throw new Error(`Ошибка HTTP: ${response.status}`);
             
             const data = await response.json();
