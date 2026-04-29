@@ -230,7 +230,7 @@
         const statsPanel = document.getElementById('stats-panel');
 
         try {
-            const pageSize = 20; // Размер страницы как на сайте
+            const pageSize = 30; // Размер страницы (как на сайте: offset=30, 60...)
             let allLoadedCities = [];
             let currentPage = 1;
             let totalPages = 1;
@@ -239,25 +239,60 @@
 
             // Загружаем первую страницу, чтобы узнать общее количество
             const firstPageData = await fetchPage(1, pageSize);
-            if (!firstPageData || !firstPageData.items) {
-                throw new Error("Пустой ответ от API");
+            
+            // Проверяем структуру ответа - возможно данные лежат напрямую в массиве
+            let items = [];
+            if (firstPageData && Array.isArray(firstPageData)) {
+                items = firstPageData;
+                // Если пришел просто массив, считаем что это все данные или первая страница
+                // Для точного определения totalPages нужен анализ ответа
+                totalPages = 1; // Пока предполагаем 1, дальше проверим по количеству
+            } else if (firstPageData && firstPageData.items) {
+                items = firstPageData.items;
+                totalPages = firstPageData.pages || 1;
+            } else {
+                throw new Error("Неверная структура ответа от API");
             }
 
-            allLoadedCities = [...firstPageData.items];
-            totalPages = firstPageData.pages || 1;
+            allLoadedCities = [...items];
 
-            console.log(`Всего страниц: ${totalPages}, найдено на первой: ${allLoadedCities.length}`);
+            console.log(`Загружено с первой страницы: ${allLoadedCities.length}, страниц всего (оценка): ${totalPages}`);
 
-            // Если страниц больше одной, загружаем остальные
-            if (totalPages > 1) {
-                for (let i = 2; i <= totalPages; i++) {
-                    updateLoadingStatus(`Загрузка городов... (${i} из ${totalPages})`);
+            // Если мы получили ровно 30 элементов, возможно есть еще страницы
+            // Будем загружать следующие страницы пока не получим меньше 30 или пустой ответ
+            if (items.length === pageSize) {
+                let nextPage = 2;
+                while (true) {
+                    updateLoadingStatus(`Загрузка городов... (стр. ${nextPage})`);
                     // Небольшая задержка, чтобы не перегружать сервер
-                    await new Promise(r => setTimeout(r, 150)); 
+                    await new Promise(r => setTimeout(r, 200)); 
                     
-                    const pageData = await fetchPage(i, pageSize);
-                    if (pageData && pageData.items) {
-                        allLoadedCities = [...allLoadedCities, ...pageData.items];
+                    const pageData = await fetchPage(nextPage, pageSize);
+                    
+                    let pageItems = [];
+                    if (pageData && Array.isArray(pageData)) {
+                        pageItems = pageData;
+                    } else if (pageData && pageData.items) {
+                        pageItems = pageData.items;
+                    }
+                    
+                    if (pageItems.length === 0) {
+                        break; // Больше нет данных
+                    }
+                    
+                    allLoadedCities = [...allLoadedCities, ...pageItems];
+                    console.log(`Страница ${nextPage}: загружено ${pageItems.length}, всего: ${allLoadedCities.length}`);
+                    
+                    if (pageItems.length < pageSize) {
+                        break; // Последняя страница
+                    }
+                    
+                    nextPage++;
+                    
+                    // Защита от бесконечного цикла (максимум 10 страниц)
+                    if (nextPage > 10) {
+                        console.warn("Достигнут лимит страниц (10). Останавливаем загрузку.");
+                        break;
                     }
                 }
             }
@@ -282,19 +317,23 @@
 
     // Загрузка конкретной страницы
     async function fetchPage(page, size) {
+        const offset = (page - 1) * size;
+        
         const params = new URLSearchParams({
-            PAGE: page.toString(),
-            SIZE: size.toString()
+            offset: offset.toString(),
+            sort: API_PARAMS.sort,
+            sort_status: API_PARAMS.sort_status,
+            search: API_PARAMS.search
         });
         
-        let url = `https://my.tsfond.ru/local/components/tsfond/cities.list/ajax.php?${params.toString()}`;
+        let url = `https://my.tsfond.ru/city/get-cities-list?${params.toString()}`;
         
         // Проверяем, настроен ли proxy
         if (typeof PROXY_URL !== 'undefined' && PROXY_URL) {
             url = PROXY_URL + encodeURIComponent(url);
         }
         
-        console.log(`Запрос страницы ${page}:`, url);
+        console.log(`Запрос страницы ${page} (offset=${offset}):`, url);
         
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Ошибка HTTP: ${response.status}`);
