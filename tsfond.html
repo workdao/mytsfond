@@ -223,49 +223,50 @@
         });
     }
 
+    // Функция для получения всех данных с учетом пагинации
     async function fetchData() {
         const loadingEl = document.getElementById('loading');
         const errorEl = document.getElementById('error-message');
         const statsPanel = document.getElementById('stats-panel');
 
         try {
-            // Формируем URL с параметрами, как это делает оригинальный сайт
-            const params = new URLSearchParams({
-                offset: API_PARAMS.offset.toString(),
-                sort: API_PARAMS.sort,
-                sort_status: API_PARAMS.sort_status,
-                search: API_PARAMS.search
-            });
-            
-            let url = `${API_URL}?${params.toString()}`;
-            
-            // Проверяем, настроен ли proxy
-            if (typeof PROXY_URL !== 'undefined' && PROXY_URL) {
-                url = PROXY_URL + encodeURIComponent(url);
-            }
-            
-            console.log('Запрос к API:', url);
-            
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`Ошибка HTTP: ${response.status}`);
-            
-            const data = await response.json();
-            
-            console.log('Ответ от API:', data);
-            
-            // Обработка структуры ответа (теперь знаем точную структуру)
-            if (data && data.success && data.data && Array.isArray(data.data.cities)) {
-                allCities = data.data.cities;
-            } else if (data && data.success && data.data && Array.isArray(data.data)) {
-                allCities = data.data;
-            } else if (data && Array.isArray(data)) {
-                allCities = data;
-            } else if (data && data.items && Array.isArray(data.items)) {
-                allCities = data.items;
-            } else {
-                throw new Error('Неверный формат данных от API. Ответ: ' + JSON.stringify(data).substring(0, 200));
+            const pageSize = 20; // Размер страницы как на сайте
+            let allLoadedCities = [];
+            let currentPage = 1;
+            let totalPages = 1;
+
+            updateLoadingStatus(`Загрузка городов (стр. 1)...`);
+
+            // Загружаем первую страницу, чтобы узнать общее количество
+            const firstPageData = await fetchPage(1, pageSize);
+            if (!firstPageData || !firstPageData.items) {
+                throw new Error("Пустой ответ от API");
             }
 
+            allLoadedCities = [...firstPageData.items];
+            totalPages = firstPageData.pages || 1;
+
+            console.log(`Всего страниц: ${totalPages}, найдено на первой: ${allLoadedCities.length}`);
+
+            // Если страниц больше одной, загружаем остальные
+            if (totalPages > 1) {
+                for (let i = 2; i <= totalPages; i++) {
+                    updateLoadingStatus(`Загрузка городов... (${i} из ${totalPages})`);
+                    // Небольшая задержка, чтобы не перегружать сервер
+                    await new Promise(r => setTimeout(r, 150)); 
+                    
+                    const pageData = await fetchPage(i, pageSize);
+                    if (pageData && pageData.items) {
+                        allLoadedCities = [...allLoadedCities, ...pageData.items];
+                    }
+                }
+            }
+
+            // Присваиваем результат в глобальную переменную
+            allCities = allLoadedCities;
+
+            updateLoadingStatus('Готово!');
+            
             loadingEl.style.display = 'none';
             statsPanel.style.opacity = '1';
             updateStats();
@@ -274,8 +275,43 @@
         } catch (error) {
             console.error('Ошибка загрузки:', error);
             loadingEl.style.display = 'none';
-            errorEl.textContent = `Не удалось загрузить данные: ${error.message}. Проверьте консоль браузера для деталей.`;
+            errorEl.textContent = `Не удалось загрузить данные: ${error.message}. Проверьте консоль браузера (F12) и убедитесь, что proxytsfond.php лежит рядом.`;
             errorEl.style.display = 'block';
+        }
+    }
+
+    // Загрузка конкретной страницы
+    async function fetchPage(page, size) {
+        const params = new URLSearchParams({
+            PAGE: page.toString(),
+            SIZE: size.toString()
+        });
+        
+        let url = `https://my.tsfond.ru/local/components/tsfond/cities.list/ajax.php?${params.toString()}`;
+        
+        // Проверяем, настроен ли proxy
+        if (typeof PROXY_URL !== 'undefined' && PROXY_URL) {
+            url = PROXY_URL + encodeURIComponent(url);
+        }
+        
+        console.log(`Запрос страницы ${page}:`, url);
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Ошибка HTTP: ${response.status}`);
+        
+        const text = await response.text();
+        try {
+            return JSON.parse(text.trim());
+        } catch (e) {
+            console.error("Ответ не JSON:", text);
+            throw new Error("Сервер вернул некорректные данные (не JSON)");
+        }
+    }
+
+    function updateLoadingStatus(message) {
+        const loadingEl = document.getElementById('loading');
+        if (loadingEl) {
+            loadingEl.textContent = message;
         }
     }
 
