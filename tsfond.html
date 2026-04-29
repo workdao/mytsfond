@@ -164,8 +164,16 @@
     // Конфигурация
     // Используем proxytsfond.php для обхода CORS (раскомментируйте строку ниже и загрузите proxytsfond.php на сервер)
     const PROXY_URL = 'proxytsfond.php?url='; 
-    // const PROXY_URL = 'proxytsfond.php?url='; 
+    // const PROXY_URL = ''; 
     const API_URL = 'https://my.tsfond.ru/city/get-cities-list';
+    
+    // Параметры запроса (должны соответствовать тем, что использует сайт)
+    const API_PARAMS = {
+        offset: 0,
+        sort: 'latest',      // latest, name_asc, name_desc, objects_asc, objects_desc
+        sort_status: '',     // пустая строка для всех статусов, или: new, planned, started, ended, stopped, pause, friends
+        search: ''           // поисковый запрос
+    };
     
     // Состояние приложения
     let allCities = [];
@@ -221,26 +229,41 @@
         const statsPanel = document.getElementById('stats-panel');
 
         try {
+            // Формируем URL с параметрами, как это делает оригинальный сайт
+            const params = new URLSearchParams({
+                offset: API_PARAMS.offset.toString(),
+                sort: API_PARAMS.sort,
+                sort_status: API_PARAMS.sort_status,
+                search: API_PARAMS.search
+            });
+            
+            let url = `${API_URL}?${params.toString()}`;
+            
             // Проверяем, настроен ли proxy
-            let url = API_URL;
             if (typeof PROXY_URL !== 'undefined' && PROXY_URL) {
-                url = PROXY_URL + encodeURIComponent(API_URL);
+                url = PROXY_URL + encodeURIComponent(url);
             }
+            
+            console.log('Запрос к API:', url);
             
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Ошибка HTTP: ${response.status}`);
             
             const data = await response.json();
             
-            // Обработка структуры ответа (предполагаем, что данные в data.items или просто массив)
-            if (data && Array.isArray(data)) {
+            console.log('Ответ от API:', data);
+            
+            // Обработка структуры ответа (теперь знаем точную структуру)
+            if (data && data.success && data.data && Array.isArray(data.data.cities)) {
+                allCities = data.data.cities;
+            } else if (data && data.success && data.data && Array.isArray(data.data)) {
+                allCities = data.data;
+            } else if (data && Array.isArray(data)) {
                 allCities = data;
             } else if (data && data.items && Array.isArray(data.items)) {
                 allCities = data.items;
-            } else if (data && data.data && Array.isArray(data.data)) {
-                allCities = data.data;
             } else {
-                throw new Error('Неверный формат данных от API');
+                throw new Error('Неверный формат данных от API. Ответ: ' + JSON.stringify(data).substring(0, 200));
             }
 
             loadingEl.style.display = 'none';
@@ -251,16 +274,17 @@
         } catch (error) {
             console.error('Ошибка загрузки:', error);
             loadingEl.style.display = 'none';
-            errorEl.textContent = `Не удалось загрузить данные: ${error.message}. Возможно, проблема с CORS или сетью.`;
+            errorEl.textContent = `Не удалось загрузить данные: ${error.message}. Проверьте консоль браузера для деталей.`;
             errorEl.style.display = 'block';
         }
     }
 
     function updateStats() {
         const total = allCities.length;
-        const totalOrgs = allCities.reduce((sum, city) => sum + (parseInt(city.objects_count) || 0), 0);
-        const active = allCities.filter(c => c.status === 'started').length;
-        const planned = allCities.filter(c => c.status === 'planned').length;
+        // Структура API: city.count.objects
+        const totalOrgs = allCities.reduce((sum, city) => sum + (parseInt(city.count?.objects) || 0), 0);
+        const active = allCities.filter(c => c.status?.type === 'started').length;
+        const planned = allCities.filter(c => c.status?.type === 'planned').length;
 
         document.getElementById('stat-total').textContent = total;
         document.getElementById('stat-orgs').textContent = totalOrgs;
@@ -271,7 +295,8 @@
     function applyFiltersAndSort() {
         // Фильтрация
         filteredCities = allCities.filter(city => {
-            const matchesStatus = currentFilter === 'all' || city.status === currentFilter;
+            const statusType = city.status?.type || '';
+            const matchesStatus = currentFilter === 'all' || statusType === currentFilter;
             const matchesSearch = !searchQuery || (city.title && city.title.toLowerCase().includes(searchQuery));
             return matchesStatus && matchesSearch;
         });
@@ -279,11 +304,11 @@
         // Сортировка
         filteredCities.sort((a, b) => {
             switch (currentSort) {
-                case 'date_asc': return (a.year || 0) - (b.year || 0);
-                case 'date_desc': return (b.year || 0) - (a.year || 0);
+                case 'date_asc': return (parseInt(a.year) || 0) - (parseInt(b.year) || 0);
+                case 'date_desc': return (parseInt(b.year) || 0) - (parseInt(a.year) || 0);
                 case 'name_asc': return (a.title || '').localeCompare(b.title || '');
                 case 'name_desc': return (b.title || '').localeCompare(a.title || '');
-                case 'orgs_desc': return (parseInt(b.objects_count) || 0) - (parseInt(a.objects_count) || 0);
+                case 'orgs_desc': return (parseInt(b.count?.objects) || 0) - (parseInt(a.count?.objects) || 0);
                 default: return 0;
             }
         });
@@ -310,19 +335,33 @@
         const card = document.createElement('div');
         card.className = 'city-card';
 
-        const statusLabel = statusLabels[city.status] || city.status;
-        const imageUrl = city.image_url || 'https://via.placeholder.com/400x200?text=No+Image';
-        const objectsCount = city.objects_count || 0;
+        const statusType = city.status?.type || '';
+        const statusLabel = statusLabels[statusType] || city.status?.title || statusType;
+        // API возвращает изображение в поле image (относительный путь)
+        const imageUrl = city.image ? `https://my.tsfond.ru${city.image}` : 'https://via.placeholder.com/400x200?text=No+Image';
+        const objectsCount = city.count?.objects || 0;
         const year = city.year || 'Н/Д';
 
-        // Генерация ссылок
-        const vkLink = city.vk_url ? `<a href="${city.vk_url}" target="_blank" class="link-btn link-vk">VK</a>` : `<span class="link-btn link-disabled">VK</span>`;
-        const tgLink = city.tg_url ? `<a href="${city.tg_url}" target="_blank" class="link-btn link-tg">Telegram</a>` : `<span class="link-btn link-disabled">TG</span>`;
-        const siteLink = city.site_url ? `<a href="${city.site_url}" target="_blank" class="link-btn link-site">Сайт</a>` : `<span class="link-btn link-disabled">Сайт</span>`;
+        // Генерация ссылок из resources
+        let vkLink = `<span class="link-btn link-disabled">VK</span>`;
+        let tgLink = `<span class="link-btn link-disabled">TG</span>`;
+        let siteLink = `<span class="link-btn link-disabled">Сайт</span>`;
+        
+        if (city.resources && Array.isArray(city.resources)) {
+            city.resources.forEach(res => {
+                if (res.type === 'vk') {
+                    vkLink = `<a href="${res.url}" target="_blank" class="link-btn link-vk">VK</a>`;
+                } else if (res.type === 'tg') {
+                    tgLink = `<a href="${res.url}" target="_blank" class="link-btn link-tg">Telegram</a>`;
+                } else if (res.type === 'site') {
+                    siteLink = `<a href="${res.url}" target="_blank" class="link-btn link-site">Сайт</a>`;
+                }
+            });
+        }
 
         card.innerHTML = `
             <div class="card-image" style="background-image: url('${imageUrl}')">
-                <span class="card-status" style="background-color: var(--status-${city.status})">${statusLabel}</span>
+                <span class="card-status" style="background-color: var(--status-${statusType})">${statusLabel}</span>
             </div>
             <div class="card-body">
                 <div class="card-title">${city.title}</div>
@@ -334,7 +373,7 @@
                         <span>Объектов</span>
                     </div>
                     <div class="stat-item">
-                        <strong>${city.status === 'started' ? 'Да' : 'Нет'}</strong>
+                        <strong>${statusType === 'started' ? 'Да' : 'Нет'}</strong>
                         <span>Активен</span>
                     </div>
                 </div>
@@ -360,23 +399,35 @@
 
         if (format === 'json') {
             content = JSON.stringify(filteredCities, null, 2);
-            filename = 'tomsoyer_cities.json';
+            filename = 'tsfond_cities.json';
             mimeType = 'application/json';
         } else if (format === 'csv') {
             const headers = ['ID', 'Город', 'Год', 'Статус', 'Объектов', 'VK', 'TG', 'Сайт'];
-            const rows = filteredCities.map(c => [
-                c.id,
-                `"${(c.title || '').replace(/"/g, '""')}"`,
-                c.year,
-                c.status,
-                c.objects_count,
-                c.vk_url || '',
-                c.tg_url || '',
-                c.site_url || ''
-            ]);
+            const rows = filteredCities.map(c => {
+                // Извлекаем ссылки из resources
+                let vkUrl = '', tgUrl = '', siteUrl = '';
+                if (c.resources && Array.isArray(c.resources)) {
+                    c.resources.forEach(res => {
+                        if (res.type === 'vk') vkUrl = res.url;
+                        if (res.type === 'tg') tgUrl = res.url;
+                        if (res.type === 'site') siteUrl = res.url;
+                    });
+                }
+                
+                return [
+                    c.id,
+                    `"${(c.title || '').replace(/"/g, '""')}"`,
+                    c.year,
+                    c.status?.title || c.status?.type || '',
+                    c.count?.objects || 0,
+                    vkUrl,
+                    tgUrl,
+                    siteUrl
+                ];
+            });
             
             content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-            filename = 'tomsoyer_cities.csv';
+            filename = 'tsfond_cities.csv';
             mimeType = 'text/csv;charset=utf-8;';
         }
 
