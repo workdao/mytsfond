@@ -240,17 +240,19 @@
             // Загружаем первую страницу, чтобы узнать общее количество
             const firstPageData = await fetchPage(1, pageSize);
             
-            // Проверяем структуру ответа - возможно данные лежат напрямую в массиве
+            // Проверяем структуру ответа - новый API возвращает { cities: [...] }
             let items = [];
-            if (firstPageData && Array.isArray(firstPageData)) {
-                items = firstPageData;
-                // Если пришел просто массив, считаем что это все данные или первая страница
-                // Для точного определения totalPages нужен анализ ответа
+            if (firstPageData && firstPageData.cities && Array.isArray(firstPageData.cities)) {
+                items = firstPageData.cities;
                 totalPages = 1; // Пока предполагаем 1, дальше проверим по количеству
+            } else if (firstPageData && Array.isArray(firstPageData)) {
+                items = firstPageData;
+                totalPages = 1;
             } else if (firstPageData && firstPageData.items) {
                 items = firstPageData.items;
                 totalPages = firstPageData.pages || 1;
             } else {
+                console.error("Неизвестная структура ответа:", firstPageData);
                 throw new Error("Неверная структура ответа от API");
             }
 
@@ -270,7 +272,10 @@
                     const pageData = await fetchPage(nextPage, pageSize);
                     
                     let pageItems = [];
-                    if (pageData && Array.isArray(pageData)) {
+                    // Новый API возвращает { cities: [...] }
+                    if (pageData && pageData.cities && Array.isArray(pageData.cities)) {
+                        pageItems = pageData.cities;
+                    } else if (pageData && Array.isArray(pageData)) {
                         pageItems = pageData;
                     } else if (pageData && pageData.items) {
                         pageItems = pageData.items;
@@ -326,7 +331,7 @@
             search: API_PARAMS.search
         });
         
-        let url = `https://my.tsfond.ru/city/get-cities-list?${params.toString()}`;
+        let url = `https://my.tsfond.ru/city/get-cities-menu?${params.toString()}`;
         
         // Проверяем, настроен ли proxy
         if (typeof PROXY_URL !== 'undefined' && PROXY_URL) {
