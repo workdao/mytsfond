@@ -1,7 +1,7 @@
 <?php
 /**
  * Proxy для обхода CORS при запросах к API my.tsfond.ru
- * Использование: proxy.php?url=<encoded_api_url>
+ * Использование: proxytsfond.php?url=<encoded_api_url>
  */
 
 // Разрешаем запросы только с вашего домена (можно настроить)

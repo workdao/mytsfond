@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Города Твой Сектор Фанда | my.tsfond.ru</title>
+    <title>Города Том Сойер Фест | my.tsfond.ru</title>
     <style>
         :root {
             --primary-color: #4a90e2;
@@ -102,8 +102,8 @@
 
 <div class="container">
     <header>
-        <h1>Города Твой Сектор Фанда</h1>
-        <p class="subtitle">Данные с my.tsfond.ru/city</p>
+        <h1>Города Том Сойер Фест</h1>
+        <p class="subtitle">Карта проектов фестиваля | my.tsfond.ru/city</p>
     </header>
 
     <div id="error-message" class="error" style="display: none;"></div>
@@ -115,11 +115,11 @@
         </div>
         <div class="stat-card">
             <div class="stat-value" id="stat-orgs">0</div>
-            <div class="stat-label">Организаций</div>
+            <div class="stat-label">Объектов восстановления</div>
         </div>
         <div class="stat-card">
             <div class="stat-value" id="stat-active">0</div>
-            <div class="stat-label">Активных</div>
+            <div class="stat-label">Активных проектов</div>
         </div>
         <div class="stat-card">
             <div class="stat-value" id="stat-planned">0</div>
@@ -129,14 +129,14 @@
 
     <div class="controls">
         <div class="status-filters" id="status-filters">
-            <button class="status-btn active" data-status="all">Все</button>
+            <button class="status-btn active" data-status="all">Все проекты</button>
             <button class="status-btn" data-status="new">Новые</button>
             <button class="status-btn" data-status="planned">В планах</button>
             <button class="status-btn" data-status="started">Активные</button>
             <button class="status-btn" data-status="ended">Завершенные</button>
             <button class="status-btn" data-status="stopped">Остановленные</button>
             <button class="status-btn" data-status="pause">Пауза</button>
-            <button class="status-btn" data-status="friends">Друзья</button>
+            <button class="status-btn" data-status="friends">Друзья фестиваля</button>
         </div>
 
         <div class="filter-group" style="width: 100%; justify-content: space-between; margin-top: 10px;">
@@ -148,7 +148,7 @@
                     <option value="date_asc">Сначала старые (год)</option>
                     <option value="name_asc">По алфавиту (А-Я)</option>
                     <option value="name_desc">По алфавиту (Я-А)</option>
-                    <option value="orgs_desc">По кол-ву организаций</option>
+                    <option value="orgs_desc">По кол-ву объектов</option>
                 </select>
                 <button class="btn btn-secondary" onclick="exportData('json')">JSON</button>
                 <button class="btn btn-secondary" onclick="exportData('csv')">CSV</button>
@@ -162,8 +162,9 @@
 
 <script>
     // Конфигурация
-    // Используем proxy.php для обхода CORS (раскомментируйте строку ниже и загрузите proxy.php на сервер)
-    // const PROXY_URL = 'proxy.php?url='; 
+    // Используем proxytsfond.php для обхода CORS (раскомментируйте строку ниже и загрузите proxytsfond.php на сервер)
+    const PROXY_URL = 'proxytsfond.php?url='; 
+    // const PROXY_URL = 'proxytsfond.php?url='; 
     const API_URL = 'https://my.tsfond.ru/city/get-cities-list';
     
     // Состояние приложения
@@ -175,13 +176,13 @@
 
     // Маппинг статусов для отображения
     const statusLabels = {
-        'new': 'Новый',
+        'new': 'Новый проект',
         'planned': 'В планах',
         'started': 'Активен',
         'ended': 'Завершен',
         'stopped': 'Остановлен',
         'pause': 'Пауза',
-        'friends': 'Друзья'
+        'friends': 'Друзья фестиваля'
     };
 
     // Инициализация
@@ -330,7 +331,7 @@
                 <div class="card-stats">
                     <div class="stat-item">
                         <strong>${objectsCount}</strong>
-                        <span>Организаций</span>
+                        <span>Объектов</span>
                     </div>
                     <div class="stat-item">
                         <strong>${city.status === 'started' ? 'Да' : 'Нет'}</strong>
@@ -359,10 +360,10 @@
 
         if (format === 'json') {
             content = JSON.stringify(filteredCities, null, 2);
-            filename = 'tsfond_cities.json';
+            filename = 'tomsoyer_cities.json';
             mimeType = 'application/json';
         } else if (format === 'csv') {
-            const headers = ['ID', 'Название', 'Год', 'Статус', 'Организаций', 'VK', 'TG', 'Сайт'];
+            const headers = ['ID', 'Город', 'Год', 'Статус', 'Объектов', 'VK', 'TG', 'Сайт'];
             const rows = filteredCities.map(c => [
                 c.id,
                 `"${(c.title || '').replace(/"/g, '""')}"`,
@@ -375,7 +376,7 @@
             ]);
             
             content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-            filename = 'tsfond_cities.csv';
+            filename = 'tomsoyer_cities.csv';
             mimeType = 'text/csv;charset=utf-8;';
         }
 
