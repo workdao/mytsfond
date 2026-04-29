@@ -300,8 +300,12 @@
         if (!response.ok) throw new Error(`Ошибка HTTP: ${response.status}`);
         
         const text = await response.text();
+        console.log(`Ответ страницы ${page}:`, text);
+        
         try {
-            return JSON.parse(text.trim());
+            const data = JSON.parse(text.trim());
+            console.log(`Распарсенные данные страницы ${page}:`, data);
+            return data;
         } catch (e) {
             console.error("Ответ не JSON:", text);
             throw new Error("Сервер вернул некорректные данные (не JSON)");
